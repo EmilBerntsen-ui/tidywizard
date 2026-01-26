@@ -1,7 +1,10 @@
+# Prefer .venv if present (run: pip install -e . in the venv first)
+PY := $(or $(wildcard .venv/bin/python),python)
+
 qa:
-	python -m ruff check .
-	python -m mypy .
-	python -m pytest -q
+	$(PY) -m ruff check .
+	$(PY) -m mypy .
+	$(PY) -m pytest -q
 
 run:
 	PYTHONPATH=. streamlit run app/Home.py

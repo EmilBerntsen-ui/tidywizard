@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from core.io import load_csv, load_excel
+from core.io import load_csv
 
 
 def test_load_csv_from_string_path(tmp_path: Path) -> None:

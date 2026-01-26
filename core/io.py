@@ -35,6 +35,10 @@ def load_csv(
     if isinstance(source, io.BytesIO) and len(source.getvalue()) == 0:
         raise ValueError("CSV source is empty.")
 
+    # pandas.read_csv expects path or file-like; wrap bytes in BytesIO.
+    if isinstance(source, bytes):
+        source = io.BytesIO(source)
+
     default_kwargs: dict[str, Any] = {
         "encoding": encoding,
         "dtype_backend": "numpy_nullable",

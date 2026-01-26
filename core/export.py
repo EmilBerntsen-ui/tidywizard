@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 
 def _spec_to_python_literal(obj: Any) -> str:

@@ -9,6 +9,13 @@ import streamlit as st
 
 from core.profile import profile_dataframe
 
+
+@st.cache_data(ttl=3600)
+def _cached_profile(cache_key: str, _df) -> dict:
+    """Cache profile by key; _df is not hashed (Streamlit convention)."""
+    return profile_dataframe(_df)
+
+
 st.title("📊 Profile")
 
 if "df_raw" not in st.session_state:
@@ -16,7 +23,8 @@ if "df_raw" not in st.session_state:
     st.stop()
 
 df = st.session_state["df_raw"]
-profile = profile_dataframe(df)
+cache_key = f"profile_{id(df)}_{df.shape[0]}_{df.shape[1]}_{hash(tuple(df.columns))}"
+profile = _cached_profile(cache_key, df)
 
 st.metric("Duplicate rows", profile["n_duplicates"])
 st.write("")

@@ -1,5 +1,6 @@
 """Export: cleaned CSV, pipeline.yaml, pipeline.py, and reproducibility info."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -7,8 +8,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import streamlit as st
 
+from core.export import pipeline_to_python, pipeline_to_yaml
 from core.pipeline import apply_pipeline
-from core.export import pipeline_to_yaml, pipeline_to_python
+
+
+@st.cache_data(ttl=3600)
+def _cached_apply_pipeline(cache_key: str, _df, _spec: dict):
+    """Cache apply_pipeline by key; _df and _spec are not hashed."""
+    return apply_pipeline(_df, _spec)
+
+
+@st.cache_data(ttl=3600)
+def _cached_yaml(spec_key: str, _spec: dict) -> str:
+    """Cache pipeline_to_yaml by spec key."""
+    return pipeline_to_yaml(_spec)
+
+
+@st.cache_data(ttl=3600)
+def _cached_python(cache_key: str, _spec: dict, _input_path: str, _output_path: str) -> str:
+    """Cache pipeline_to_python by key."""
+    return pipeline_to_python(_spec, input_path=_input_path, output_path=_output_path)
+
 
 st.title("📥 Export")
 
@@ -20,8 +40,11 @@ df_raw = st.session_state["df_raw"]
 spec = st.session_state.get("pipeline_spec") or {"version": 1, "steps": []}
 steps = spec.get("steps") or []
 
+pipeline_cache_key = (
+    f"pipeline_{id(df_raw)}_{df_raw.shape[0]}_{df_raw.shape[1]}_{hash(json.dumps(spec, sort_keys=True))}"
+)
 try:
-    df_clean = apply_pipeline(df_raw, spec)
+    df_clean = _cached_apply_pipeline(pipeline_cache_key, df_raw, spec)
 except ValueError as e:
     st.error(f"Pipeline error: {e}")
     st.stop()
@@ -40,7 +63,8 @@ st.download_button(
 )
 
 # Download pipeline.yaml
-yaml_str = pipeline_to_yaml(spec)
+spec_key = str(hash(json.dumps(spec, sort_keys=True)))
+yaml_str = _cached_yaml(spec_key, spec)
 st.download_button(
     "Download pipeline.yaml",
     data=yaml_str.encode("utf-8"),
@@ -52,7 +76,8 @@ st.download_button(
 # Download pipeline.py
 input_path = "input.csv"
 output_path = f"{base}_cleaned.csv"
-py_str = pipeline_to_python(spec, input_path=input_path, output_path=output_path)
+py_cache_key = f"py_{hash(json.dumps(spec, sort_keys=True))}_{input_path}_{output_path}"
+py_str = _cached_python(py_cache_key, spec, input_path, output_path)
 st.download_button(
     "Download pipeline.py",
     data=py_str.encode("utf-8"),
@@ -65,7 +90,7 @@ st.subheader("Reproducibility")
 try:
     import pandas as pd
     import streamlit as _st
-    import yaml as _yaml
+    import yaml as _yaml  # type: ignore[import-untyped]
     v_pd = getattr(pd, "__version__", "?")
     v_st = getattr(_st, "__version__", "?")
     v_yml = getattr(_yaml, "__version__", "?")

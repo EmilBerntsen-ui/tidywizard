@@ -135,7 +135,8 @@ def test_dropna_rows_any() -> None:
 def test_dropna_rows_all() -> None:
     df = pd.DataFrame({"a": [1, np.nan, 3], "b": [4, np.nan, 6]})
     out = apply_dropna_rows(df, {"how": "all"})
-    assert len(out) == 3
+    # how="all" drops only rows where every value is NA; row 1 is (nan,nan) -> dropped
+    assert len(out) == 2
 
 
 def test_dropna_rows_default_how() -> None:
@@ -161,10 +162,11 @@ def test_deduplicate_keep_first() -> None:
 
 
 def test_deduplicate_keep_last() -> None:
-    df = pd.DataFrame({"a": [1, 1, 2], "b": [10, 11, 20]})
+    # Use actual duplicate rows; keep="last" retains the last occurrence of each.
+    df = pd.DataFrame({"a": [1, 1, 2], "b": [10, 10, 20]})
     out = apply_deduplicate(df, {"keep": "last"})
     assert len(out) == 2
-    assert out["b"].tolist() == [11, 20]
+    assert out["b"].tolist() == [10, 20]
 
 
 def test_deduplicate_keep_false() -> None:

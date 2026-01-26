@@ -1,10 +1,12 @@
 """Tests for pipeline export: YAML and pipeline.py."""
 
+from typing import Any
+
 from core.export import pipeline_to_yaml, pipeline_to_python
 
 
 def test_pipeline_to_yaml_roundtrip() -> None:
-    import yaml
+    import yaml  # type: ignore[import-untyped]
 
     spec = {"version": 1, "steps": [{"name": "drop_columns", "params": {"columns": ["a"]}}]}
     s = pipeline_to_yaml(spec)
@@ -15,7 +17,7 @@ def test_pipeline_to_yaml_roundtrip() -> None:
 
 
 def test_pipeline_to_yaml_adds_version() -> None:
-    spec = {"steps": []}
+    spec: dict[str, Any] = {"steps": []}
     s = pipeline_to_yaml(spec)
     assert "version" in s
 

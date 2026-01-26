@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -98,7 +98,8 @@ def apply_impute(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
         elif strategy == "mode":
             mode_vals = s.mode()
             fill = mode_vals.iloc[0] if len(mode_vals) > 0 else (fv if fv is not None else "unknown")
-            out[col] = s.fillna(fill)
+            # Use where to avoid FutureWarning from fillna downcasting object dtypes
+            out[col] = s.where(s.notna(), fill)
         else:
             # no-op / skip
             pass
