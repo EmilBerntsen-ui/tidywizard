@@ -1,0 +1,9 @@
+name,age,city,salary,notes,first name,all_null
+Alice,30,Oslo,50000,,Alice,
+Bob,,Berlin,48000,duplicate,Bob,
+Carol,25,Paris,,missing salary,Carol,
+Alice,30,Oslo,50000,duplicate,Alice,
+David,NA,London,52000,,David,
+Eve,28,,45000,no city,Eve,
+Bob,,Berlin,48000,duplicate,Bob,
+Frank,,,60000,missing age and city,Frank,

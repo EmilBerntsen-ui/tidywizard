@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "tidywizard"
 version = "0.1.0"
@@ -8,6 +12,9 @@ dependencies = [
   "numpy>=1.26",
   "pyyaml>=6.0",
   "openpyxl>=3.1",
+  "pytest>=7",
+  "ruff>=0.1",
+  "mypy>=1.0",
 ]
 
 [tool.ruff]
@@ -20,3 +27,8 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*"]

@@ -4,4 +4,4 @@ qa:
 	python -m pytest -q
 
 run:
-	streamlit run app/Home.py
+	PYTHONPATH=. streamlit run app/Home.py
