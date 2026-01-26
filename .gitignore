@@ -1,0 +1,18 @@
+# Python build / packaging
+*.egg-info/
+dist/
+build/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Conda / envs (optional)
+.venv/
+.env/
+
+# macOS
+.DS_Store
