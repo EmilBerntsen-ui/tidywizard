@@ -82,7 +82,7 @@ def apply_impute(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
             fv = cfg.get("fill_value")
 
         if strategy == "constant":
-            if fv is None and pd.isna(fv):
+            if fv is None or pd.isna(fv):
                 raise ValueError(f"impute: 'constant' strategy requires a non-null fill_value for {col}.")
             out[col] = s.fillna(fv)
             continue
@@ -143,6 +143,186 @@ def apply_deduplicate(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
     return df.drop_duplicates(keep=keep)
 
 
+# --- melt (wide-to-long) ---
+
+
+def _validate_melt_params(params: dict[str, Any]) -> None:
+    if not isinstance(params, dict):
+        raise ValueError("melt params must be a dict.")
+    id_vars = params.get("id_vars")
+    if id_vars is None:
+        raise ValueError("melt requires 'id_vars' in params.")
+    if not isinstance(id_vars, (list, tuple)):
+        raise ValueError("melt 'id_vars' must be a list or tuple of column names.")
+    for c in id_vars:
+        if not isinstance(c, str):
+            raise ValueError(f"melt 'id_vars' must contain strings, got: {type(c).__name__}")
+    value_vars = params.get("value_vars")
+    if value_vars is not None:
+        if not isinstance(value_vars, (list, tuple)):
+            raise ValueError("melt 'value_vars' must be a list, tuple, or null.")
+        for c in value_vars:
+            if not isinstance(c, str):
+                raise ValueError(f"melt 'value_vars' must contain strings, got: {type(c).__name__}")
+    var_name = params.get("var_name", "variable")
+    if not isinstance(var_name, str):
+        raise ValueError("melt 'var_name' must be a string.")
+    value_name = params.get("value_name", "value")
+    if not isinstance(value_name, str):
+        raise ValueError("melt 'value_name' must be a string.")
+
+
+def apply_melt(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
+    """Unpivot (melt) from wide to long format."""
+    _validate_melt_params(params)
+    id_vars = params["id_vars"]
+    value_vars = params.get("value_vars")
+    var_name = params.get("var_name", "variable")
+    value_name = params.get("value_name", "value")
+
+    missing_ids = [c for c in id_vars if c not in df.columns]
+    if missing_ids:
+        raise ValueError(f"melt: id_vars columns not found: {missing_ids}")
+    if value_vars is not None:
+        missing_vals = [c for c in value_vars if c not in df.columns]
+        if missing_vals:
+            raise ValueError(f"melt: value_vars columns not found: {missing_vals}")
+
+    return pd.melt(
+        df,
+        id_vars=id_vars,
+        value_vars=value_vars if value_vars else None,
+        var_name=var_name,
+        value_name=value_name,
+    )
+
+
+# --- rename_columns ---
+
+
+def _validate_rename_columns_params(params: dict[str, Any]) -> None:
+    if not isinstance(params, dict):
+        raise ValueError("rename_columns params must be a dict.")
+    mapping = params.get("mapping")
+    if mapping is None:
+        raise ValueError("rename_columns requires 'mapping' in params.")
+    if not isinstance(mapping, dict):
+        raise ValueError("rename_columns 'mapping' must be a dict of {old_name: new_name}.")
+    for k, v in mapping.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            raise ValueError("rename_columns mapping keys and values must be strings.")
+
+
+def apply_rename_columns(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
+    """Rename columns using a mapping. Missing columns are ignored."""
+    _validate_rename_columns_params(params)
+    mapping = {k: v for k, v in params["mapping"].items() if k in df.columns}
+    return df.rename(columns=mapping)
+
+
+# --- filter_rows ---
+
+
+_FILTER_OPS = ("eq", "ne", "gt", "lt", "ge", "le", "contains", "not_contains", "isin", "notin")
+
+
+def _validate_filter_rows_params(params: dict[str, Any]) -> None:
+    if not isinstance(params, dict):
+        raise ValueError("filter_rows params must be a dict.")
+    column = params.get("column")
+    if not isinstance(column, str):
+        raise ValueError("filter_rows requires 'column' (string) in params.")
+    op = params.get("op")
+    if op not in _FILTER_OPS:
+        raise ValueError(
+            f"filter_rows 'op' must be one of {', '.join(_FILTER_OPS)}; got {op!r}"
+        )
+    if "value" not in params:
+        raise ValueError("filter_rows requires 'value' in params.")
+
+
+def apply_filter_rows(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
+    """Keep rows matching a condition on a single column."""
+    _validate_filter_rows_params(params)
+    col = params["column"]
+    if col not in df.columns:
+        raise ValueError(f"filter_rows: column '{col}' not found.")
+    op = params["op"]
+    val = params["value"]
+    s = df[col]
+    if op == "eq":
+        mask = s == val
+    elif op == "ne":
+        mask = s != val
+    elif op == "gt":
+        mask = s > val
+    elif op == "lt":
+        mask = s < val
+    elif op == "ge":
+        mask = s >= val
+    elif op == "le":
+        mask = s <= val
+    elif op == "contains":
+        mask = s.astype(str).str.contains(str(val), na=False)
+    elif op == "not_contains":
+        mask = ~s.astype(str).str.contains(str(val), na=False)
+    elif op == "isin":
+        mask = s.isin(val if isinstance(val, list) else [val])
+    elif op == "notin":
+        mask = ~s.isin(val if isinstance(val, list) else [val])
+    else:
+        mask = pd.Series(True, index=df.index)
+    return df.loc[mask].reset_index(drop=True)
+
+
+# --- replace_values ---
+
+
+def _validate_replace_values_params(params: dict[str, Any]) -> None:
+    if not isinstance(params, dict):
+        raise ValueError("replace_values params must be a dict.")
+    mapping = params.get("mapping")
+    if mapping is None or not isinstance(mapping, dict):
+        raise ValueError("replace_values requires 'mapping' dict of {old_value: new_value}.")
+
+
+def apply_replace_values(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
+    """Replace specific cell values. Optionally scoped to certain columns."""
+    _validate_replace_values_params(params)
+    mapping = params["mapping"]
+    columns = params.get("columns")
+    out = df.copy()
+    if columns:
+        for col in columns:
+            if col in out.columns:
+                out[col] = out[col].replace(mapping)
+    else:
+        out = out.replace(mapping)
+    return out
+
+
+# --- strip_whitespace ---
+
+
+def _validate_strip_whitespace_params(params: dict[str, Any]) -> None:
+    if not isinstance(params, dict):
+        raise ValueError("strip_whitespace params must be a dict.")
+
+
+def apply_strip_whitespace(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
+    """Strip leading/trailing whitespace from column names and/or cell values."""
+    _validate_strip_whitespace_params(params)
+    out = df.copy()
+    if params.get("strip_headers", True):
+        out.columns = [c.strip() if isinstance(c, str) else c for c in out.columns]
+    columns = params.get("columns")
+    target_cols = columns if columns else [c for c in out.columns if out[c].dtype == object]
+    for col in target_cols:
+        if col in out.columns and out[col].dtype == object:
+            out[col] = out[col].str.strip()
+    return out
+
+
 # --- Registry ---
 
 
@@ -151,4 +331,9 @@ STEP_REGISTRY: dict[str, Callable[[pd.DataFrame, dict[str, Any]], pd.DataFrame]]
     "impute": apply_impute,
     "dropna_rows": apply_dropna_rows,
     "deduplicate": apply_deduplicate,
+    "melt": apply_melt,
+    "rename_columns": apply_rename_columns,
+    "filter_rows": apply_filter_rows,
+    "replace_values": apply_replace_values,
+    "strip_whitespace": apply_strip_whitespace,
 }

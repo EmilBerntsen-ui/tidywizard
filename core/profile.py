@@ -1,4 +1,4 @@
-"""DataFrame profiling: dtypes, missing, unique, top values, duplicates."""
+"""DataFrame profiling: dtypes, missing, unique, top values, duplicates, numeric stats."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def profile_dataframe(df: pd.DataFrame) -> dict[str, Any]:
 
     Returns:
         dict with:
-          - columns: list of {name, dtype, pct_missing, n_unique, top_values}
+          - columns: list of column info dicts
           - n_rows, n_cols
           - n_duplicates: number of duplicate rows
     """
@@ -37,15 +37,28 @@ def profile_dataframe(df: pd.DataFrame) -> dict[str, Any]:
             for val, cnt in vc.head(5).items():
                 top_values.append((val, int(cnt)))
 
-        columns.append(
-            {
-                "name": col,
-                "dtype": dtype,
-                "pct_missing": pct_missing,
-                "n_unique": n_unique,
-                "top_values": top_values,
-            }
-        )
+        info: dict[str, Any] = {
+            "name": col,
+            "dtype": dtype,
+            "pct_missing": pct_missing,
+            "n_unique": n_unique,
+            "top_values": top_values,
+        }
+
+        # Numeric statistics
+        if pd.api.types.is_numeric_dtype(s) and s.notna().any():
+            info["min"] = float(s.min())
+            info["max"] = float(s.max())
+            info["mean"] = round(float(s.mean()), 4)
+            info["std"] = round(float(s.std()), 4) if len(s) > 1 else 0.0
+
+        # Constant column detection
+        info["is_constant"] = bool(s.dropna().nunique() <= 1) and s.notna().any()
+
+        # Whitespace in column name
+        info["has_whitespace_in_name"] = isinstance(col, str) and col != col.strip()
+
+        columns.append(info)
 
     return {
         "columns": columns,

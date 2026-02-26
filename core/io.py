@@ -105,6 +105,18 @@ def load_excel(
     return _normalize_dtypes(df)
 
 
+def get_excel_sheet_names(source: str | bytes | io.BytesIO) -> list[str]:
+    """Return list of sheet names from an Excel file."""
+    if isinstance(source, bytes):
+        source = io.BytesIO(source)
+    import openpyxl
+
+    wb = openpyxl.load_workbook(source, read_only=True, data_only=True)
+    names = wb.sheetnames
+    wb.close()
+    return names
+
+
 def _normalize_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """Ensure mixed-type columns become object; avoid categorical for consistency."""
     out = df.copy()
