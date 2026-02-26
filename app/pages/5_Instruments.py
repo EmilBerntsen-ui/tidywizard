@@ -1,4 +1,5 @@
 """Instrument-specific file loading: alternative entry point to the generic Upload page."""
+
 import sys
 from pathlib import Path
 
@@ -15,16 +16,25 @@ st.markdown(
 instrument = st.selectbox("Select instrument", list(_INSTRUMENTS.keys()))
 
 if _INSTRUMENTS[instrument] == "prometheus_panta":
+    st.markdown(
+        "**Prometheus Panta** — NanoTemper nanoDSF. "
+        "Upload the melting scan CSV (semicolon-separated, from NanoTemper software)."
+    )
     uploaded_scan = st.file_uploader(
-        "Melting scan CSV (required)", type=["csv", "txt"], key="panta_scan"
+        "Melting scan CSV (required)",
+        type=["csv", "txt"],
+        key="panta_scan",
+        help="The semicolon-separated raw data file exported from the Prometheus Panta software.",
     )
     uploaded_meta = st.file_uploader(
-        "Data table TSV (optional)", type=["tsv", "txt", "csv"], key="panta_meta"
+        "Data table TSV (optional — not yet processed)", type=["tsv", "txt", "csv"], key="panta_meta"
     )
     if uploaded_meta is not None:
         st.info("Data table TSV received. Metadata merge is not yet implemented.")
     if st.button("Parse", disabled=uploaded_scan is None):
-        assert uploaded_scan is not None  # button is disabled when None
+        if uploaded_scan is None:
+            st.error("No file uploaded.")
+            st.stop()
         try:
             df = load_melting_scan(uploaded_scan)
             st.session_state["df_raw"] = df
@@ -35,7 +45,7 @@ if _INSTRUMENTS[instrument] == "prometheus_panta":
                 f"Parsed **{n}** rows × **{p}** columns from `{uploaded_scan.name}`."
             )
             st.dataframe(df.head(20), use_container_width=True)
-            st.info("Continue to Profile or Clean in the sidebar.")
+            st.info("Continue to **Profile** or **Clean** in the sidebar.")
         except ValueError as e:
             st.error(str(e))
         except Exception as e:
