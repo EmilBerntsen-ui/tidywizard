@@ -126,3 +126,103 @@ def test_pair_columns_odd_column_count_raises() -> None:
     df_raw = pd.DataFrame({"Temperatur for Cap.1 (C)": ["25.0"]})
     with pytest.raises(ValueError, match="even number of columns"):
         _pair_columns(df_raw)
+
+
+# ── Synthetic CSV builder ─────────────────────────────────────────────────
+
+
+def _make_csv(n_capillaries: int = 2, n_rows: int = 3) -> bytes:
+    """
+    Build a minimal synthetic Prometheus Panta melting scan CSV (cp1252 encoded).
+    Column names use the degree symbol (\\xb0) to test encoding handling.
+    """
+    header_parts = []
+    for cap in range(1, n_capillaries + 1):
+        header_parts += [
+            f"Temperatur for Cap.{cap} (\xb0C)",
+            f"Ratio 350 nm / 330 nm for Cap.{cap}",
+            f"Temperatur for Cap.{cap} (\xb0C)",
+            f"Turbidity for Cap.{cap}",
+            f"Temperatur for Cap.{cap} (\xb0C)",
+            f"Cumulant Radius for Cap.{cap} (nm)",
+        ]
+
+    rows = [";".join(header_parts)]
+    for row_i in range(n_rows):
+        temp = 25.0 + row_i * 0.1
+        row_parts = []
+        for cap in range(1, n_capillaries + 1):
+            row_parts += [
+                f"{temp:.1f}", f"{1.2 + cap * 0.01 + row_i * 0.001:.3f}",
+                f"{temp:.1f}", f"{0.002 + row_i * 0.001:.3f}",
+                f"{temp:.1f}", f"{4.5 + cap * 0.1 + row_i * 0.01:.2f}",
+            ]
+        rows.append(";".join(row_parts))
+
+    return "\n".join(rows).encode("cp1252")
+
+
+# ── load_melting_scan ─────────────────────────────────────────────────────
+
+
+def test_load_schema() -> None:
+    df = load_melting_scan(_make_csv())
+    assert list(df.columns) == ["capillary", "measurement_type", "temperature", "value"]
+    assert pd.api.types.is_integer_dtype(df["capillary"])
+    assert df["measurement_type"].dtype == object
+    assert pd.api.types.is_float_dtype(df["temperature"])
+    assert pd.api.types.is_float_dtype(df["value"])
+
+
+def test_load_row_count() -> None:
+    # 2 capillaries × 3 measurement types × 3 rows = 18 rows
+    df = load_melting_scan(_make_csv(n_capillaries=2, n_rows=3))
+    assert len(df) == 18
+
+
+def test_load_capillaries_present() -> None:
+    df = load_melting_scan(_make_csv(n_capillaries=2))
+    assert set(df["capillary"].unique()) == {1, 2}
+
+
+def test_load_measurement_types_present() -> None:
+    df = load_melting_scan(_make_csv())
+    assert set(df["measurement_type"].unique()) == {"ratio", "turbidity", "cumulant_radius"}
+
+
+def test_load_no_duplicate_index() -> None:
+    df = load_melting_scan(_make_csv())
+    dupes = df.duplicated(subset=["capillary", "measurement_type", "temperature"])
+    assert not dupes.any(), "Duplicate (capillary, measurement_type, temperature) rows found"
+
+
+def test_load_no_nulls_in_output() -> None:
+    df = load_melting_scan(_make_csv())
+    assert not df.isnull().any().any()
+
+
+def test_load_deterministic() -> None:
+    data = _make_csv()
+    a = load_melting_scan(data)
+    b = load_melting_scan(data)
+    pd.testing.assert_frame_equal(a, b)
+
+
+def test_load_accepts_bytes() -> None:
+    df = load_melting_scan(_make_csv())
+    assert len(df) > 0
+
+
+def test_load_accepts_bytesio() -> None:
+    df = load_melting_scan(io.BytesIO(_make_csv()))
+    assert len(df) > 0
+
+
+def test_load_empty_bytes_raises() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        load_melting_scan(b"")
+
+
+def test_load_none_raises() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        load_melting_scan(None)

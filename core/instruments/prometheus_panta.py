@@ -100,5 +100,51 @@ def _pair_columns(df_raw: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def load_melting_scan(source):
-    raise NotImplementedError
+def load_melting_scan(source) -> pd.DataFrame:
+    """
+    Load a Prometheus Panta melting scan CSV into tidy long format.
+
+    The file must be semicolon-separated with cp1252 encoding (standard Windows
+    output from NanoTemper software). Columns arrive in alternating pairs of
+    (temperature, measurement) for each capillary.
+
+    Args:
+        source: file path string, bytes, or BytesIO object.
+
+    Returns:
+        DataFrame with columns:
+            capillary (int)           — 1-indexed capillary number
+            measurement_type (str)    — 'ratio', 'turbidity', or 'cumulant_radius'
+            temperature (float)       — temperature in degrees Celsius
+            value (float)             — raw measurement value
+
+    Raises:
+        ValueError: if source is empty, columns are unrecognised,
+                    or a capillary number mismatch is detected.
+    """
+    if source is None:
+        raise ValueError("Melting scan source is empty.")
+    if isinstance(source, bytes):
+        if len(source) == 0:
+            raise ValueError("Melting scan source is empty.")
+        source = io.BytesIO(source)
+    if isinstance(source, io.BytesIO) and len(source.getvalue()) == 0:
+        raise ValueError("Melting scan source is empty.")
+
+    try:
+        df_raw = pd.read_csv(
+            source,
+            sep=";",
+            encoding="cp1252",
+            dtype=str,
+            skip_blank_lines=True,
+        )
+    except Exception as e:
+        raise ValueError(f"Failed to read melting scan CSV: {e}") from e
+
+    if df_raw.empty or len(df_raw.columns) == 0:
+        raise ValueError("Melting scan CSV parsed to an empty DataFrame.")
+
+    out = _pair_columns(df_raw)
+    out["capillary"] = out["capillary"].astype(int)
+    return out.reset_index(drop=True)

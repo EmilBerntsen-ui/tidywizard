@@ -1,4 +1,4 @@
-"""Unit tests for pipeline steps: drop_columns, impute, dropna_rows, deduplicate."""
+"""Unit tests for pipeline steps."""
 
 import numpy as np
 import pandas as pd
