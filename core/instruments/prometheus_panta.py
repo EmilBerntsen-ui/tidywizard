@@ -51,8 +51,53 @@ def _parse_column(col_name: str) -> tuple[int, str]:
     return capillary, mtype
 
 
-def _pair_columns(columns):
-    raise NotImplementedError
+def _pair_columns(df_raw: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert paired (temperature, measurement) columns to long-format rows.
+
+    Columns must arrive as alternating pairs: temperature column first, then
+    measurement column, for the same capillary. Raises ValueError if the count
+    is odd, a pair is in the wrong order, or capillary numbers don't match.
+    """
+    cols = list(df_raw.columns)
+    if len(cols) % 2 != 0:
+        raise ValueError(
+            f"Expected an even number of columns (temperature+measurement pairs), "
+            f"got {len(cols)}."
+        )
+
+    frames = []
+    for i in range(0, len(cols), 2):
+        temp_col = cols[i]
+        meas_col = cols[i + 1]
+
+        temp_cap, temp_type = _parse_column(temp_col)
+        meas_cap, meas_type = _parse_column(meas_col)
+
+        if temp_type != "temperature":
+            raise ValueError(
+                f"Column at index {i} should be a temperature column, got: {temp_col!r}"
+            )
+        if meas_type == "temperature":
+            raise ValueError(
+                f"Column at index {i + 1} should be a measurement column, got: {meas_col!r}"
+            )
+        if temp_cap != meas_cap:
+            raise ValueError(
+                f"Capillary mismatch at columns {i} and {i + 1}: "
+                f"temperature column is Cap.{temp_cap} "
+                f"but measurement column is Cap.{meas_cap}."
+            )
+
+        mini = pd.DataFrame({
+            "capillary": temp_cap,
+            "measurement_type": meas_type,
+            "temperature": pd.to_numeric(df_raw[temp_col], errors="coerce"),
+            "value": pd.to_numeric(df_raw[meas_col], errors="coerce"),
+        })
+        frames.append(mini)
+
+    return pd.concat(frames, ignore_index=True)
 
 
 def load_melting_scan(source):

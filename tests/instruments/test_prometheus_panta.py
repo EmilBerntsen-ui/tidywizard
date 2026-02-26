@@ -85,3 +85,44 @@ def test_parse_column_no_capillary_raises() -> None:
 def test_parse_column_unknown_type_raises() -> None:
     with pytest.raises(ValueError, match="Unrecognised column type"):
         _parse_column("Mystery Signal for Cap.1")
+
+
+# ── _pair_columns ─────────────────────────────────────────────────────────
+
+
+def _make_raw_df(n_capillaries: int = 1, n_rows: int = 2) -> pd.DataFrame:
+    """Build a minimal raw DataFrame mimicking what pd.read_csv returns."""
+    data: dict[str, list] = {}
+    for cap in range(1, n_capillaries + 1):
+        data[f"Temperatur for Cap.{cap} (C)"] = [f"{25.0 + i * 0.1:.1f}" for i in range(n_rows)]
+        data[f"Ratio 350 nm / 330 nm for Cap.{cap}"] = [f"{1.2 + i * 0.01:.3f}" for i in range(n_rows)]
+        data[f"Temperatur for Cap.{cap} (C)_t2"] = [f"{25.0 + i * 0.1:.1f}" for i in range(n_rows)]
+        data[f"Turbidity for Cap.{cap}"] = [f"{0.002 + i * 0.001:.3f}" for i in range(n_rows)]
+        data[f"Temperatur for Cap.{cap} (C)_t3"] = [f"{25.0 + i * 0.1:.1f}" for i in range(n_rows)]
+        data[f"Cumulant Radius for Cap.{cap} (nm)"] = [f"{4.5 + i * 0.01:.2f}" for i in range(n_rows)]
+    return pd.DataFrame(data)
+
+
+def test_pair_columns_schema() -> None:
+    df_raw = _make_raw_df(n_capillaries=1, n_rows=2)
+    out = _pair_columns(df_raw)
+    assert list(out.columns) == ["capillary", "measurement_type", "temperature", "value"]
+
+
+def test_pair_columns_row_count() -> None:
+    # 1 capillary × 3 measurement types × 2 rows = 6 rows
+    df_raw = _make_raw_df(n_capillaries=1, n_rows=2)
+    out = _pair_columns(df_raw)
+    assert len(out) == 6
+
+
+def test_pair_columns_measurement_types() -> None:
+    df_raw = _make_raw_df(n_capillaries=1, n_rows=2)
+    out = _pair_columns(df_raw)
+    assert set(out["measurement_type"].unique()) == {"ratio", "turbidity", "cumulant_radius"}
+
+
+def test_pair_columns_odd_column_count_raises() -> None:
+    df_raw = pd.DataFrame({"Temperatur for Cap.1 (C)": ["25.0"]})
+    with pytest.raises(ValueError, match="even number of columns"):
+        _pair_columns(df_raw)
