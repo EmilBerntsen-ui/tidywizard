@@ -40,3 +40,48 @@ def test_classify_cumulant_radius() -> None:
 
 def test_classify_unknown_returns_none() -> None:
     assert _classify_measurement_type("unknown signal for cap.1") is None
+
+
+# ── _parse_column ─────────────────────────────────────────────────────────
+
+
+def test_parse_column_temperature() -> None:
+    cap, mtype = _parse_column("Temperatur for Cap.1 (\u00b0C)")
+    assert cap == 1
+    assert mtype == "temperature"
+
+
+def test_parse_column_ratio() -> None:
+    cap, mtype = _parse_column("Ratio 350 nm / 330 nm for Cap.3")
+    assert cap == 3
+    assert mtype == "ratio"
+
+
+def test_parse_column_turbidity() -> None:
+    cap, mtype = _parse_column("Turbidity for Cap.12")
+    assert cap == 12
+    assert mtype == "turbidity"
+
+
+def test_parse_column_cumulant_radius() -> None:
+    cap, mtype = _parse_column("Cumulant Radius for Cap.2 (nm)")
+    assert cap == 2
+    assert mtype == "cumulant_radius"
+
+
+def test_parse_column_variant_capillary_label() -> None:
+    """Different firmware versions use different capillary label formats."""
+    cap, _ = _parse_column("Ratio 350/330 for Capillary 5")
+    assert cap == 5
+    cap, _ = _parse_column("Turbidity for Cap 7")
+    assert cap == 7
+
+
+def test_parse_column_no_capillary_raises() -> None:
+    with pytest.raises(ValueError, match="capillary number"):
+        _parse_column("Ratio 350 nm / 330 nm (no capillary here)")
+
+
+def test_parse_column_unknown_type_raises() -> None:
+    with pytest.raises(ValueError, match="Unrecognised column type"):
+        _parse_column("Mystery Signal for Cap.1")
