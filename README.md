@@ -9,11 +9,23 @@ A local hobby tool to clean your data and export a **reproducible pipeline** as 
 
 ## Install
 
+### Option A: pip + venv
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate   # or: .venv\Scripts\activate on Windows
 pip install -e .
 ```
+
+### Option B: conda / mamba
+
+```bash
+conda create -n tidywizard python=3.10 -y
+conda activate tidywizard
+pip install -e .
+```
+
+If you already have a conda environment you want to use, just activate it and run `pip install -e .`.
 
 ## Run
 
