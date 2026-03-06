@@ -26,7 +26,13 @@ df = st.session_state["df_raw"]
 cache_key = f"profile_{id(df)}_{df.shape[0]}_{df.shape[1]}_{hash(tuple(df.columns))}"
 profile = _cached_profile(cache_key, df)
 
-st.metric("Duplicate rows", profile["n_duplicates"])
+col1, col2, col3 = st.columns(3)
+col1.metric("Rows", profile["n_rows"])
+col2.metric("Columns", profile["n_cols"])
+col3.metric("Duplicate rows", profile["n_duplicates"])
+
+with st.expander("Browse full dataset"):
+    st.dataframe(df, use_container_width=True, height=400)
 
 # Warnings
 whitespace_cols = [c["name"] for c in profile["columns"] if c.get("has_whitespace_in_name")]

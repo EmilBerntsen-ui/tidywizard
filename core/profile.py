@@ -32,9 +32,9 @@ def profile_dataframe(df: pd.DataFrame) -> dict[str, Any]:
         n_unique = int(s.nunique())
 
         top_values: list[tuple[Any, int]] = []
-        if n_unique > 0 and n_unique <= 100 and s.dtype == object:
+        if 0 < n_unique <= 100:
             vc = s.dropna().value_counts()
-            for val, cnt in vc.head(5).items():
+            for val, cnt in vc.head(10).items():
                 top_values.append((val, int(cnt)))
 
         info: dict[str, Any] = {

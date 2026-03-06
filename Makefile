@@ -7,4 +7,4 @@ qa:
 	$(PY) -m pytest -q
 
 run:
-	PYTHONPATH=. streamlit run app/Home.py
+	PYTHONPATH=. $(PY) -m streamlit run app/Home.py

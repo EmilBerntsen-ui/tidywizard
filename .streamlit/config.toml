@@ -1,0 +1,7 @@
+[server]
+address = "127.0.0.1"
+enableXsrfProtection = false
+enableCORS = false
+
+[browser]
+serverAddress = "127.0.0.1"
