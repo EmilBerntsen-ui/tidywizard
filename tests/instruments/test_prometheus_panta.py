@@ -342,7 +342,7 @@ def _make_data_table_xlsx(n_data_rows: int = 2) -> bytes:
 
 def test_load_data_table_schema() -> None:
     df = load_data_table(io.BytesIO(_make_data_table_xlsx()))
-    assert "Exclude" in df.columns
+    assert "Exclude" not in df.columns          # dropped on load
     assert "General_Capillaries" in df.columns
     assert "Ratio_IP#1_ø" in df.columns
 
@@ -356,7 +356,7 @@ def test_load_data_table_no_data_rows_returns_empty() -> None:
     """A file with only header rows returns an empty DataFrame (not an error)."""
     df = load_data_table(io.BytesIO(_make_data_table_xlsx(n_data_rows=0)))
     assert len(df) == 0
-    assert "Exclude" in df.columns
+    assert "General_Capillaries" in df.columns
 
 
 def test_load_data_table_none_raises() -> None:
@@ -468,3 +468,25 @@ def test_load_data_table_drops_viscosity_solvent() -> None:
     df = load_data_table(buf)
     assert "Viscosity_Solvent" not in df.columns
     assert "Viscosity_other" in df.columns
+
+
+def test_load_data_table_drops_exclude_and_sigma_cols() -> None:
+    """Exclude column and all *σ / *sigma columns are dropped automatically."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["General", "General", "Ratio",        "Ratio"])
+    ws.append([None,      None,      "IP # 1 (C)",   "IP # 1 (C)"])
+    ws.append(["Exclude", "Sample",  "ø",            "σ"])    # real sigma symbol
+    ws.append([False,     "mAb-001", 68.2,           0.3])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    df = load_data_table(buf)
+    assert "Exclude" not in df.columns
+    assert "Ratio_IP # 1 (C)_σ" not in df.columns
+    assert "General_Sample" in df.columns
+    assert "Ratio_IP # 1 (C)_ø" in df.columns

@@ -281,6 +281,15 @@ def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS
     if solvent_col is not None:
         data_df = data_df.drop(columns=[solvent_col])
 
+    cols_to_drop = [
+        c for c in data_df.columns
+        if c.lower() == "exclude"
+        or c.lower().endswith("sigma")
+        or c.endswith("σ")
+    ]
+    if cols_to_drop:
+        data_df = data_df.drop(columns=cols_to_drop)
+
     return data_df.reset_index(drop=True)
 
 
