@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import streamlit as st
 
 from core.io import get_excel_sheet_names, load_csv, load_excel
-from core.instruments.prometheus_panta import load_melting_scan
+from core.instruments.prometheus_panta import load_data_table, load_melting_scan
 
 st.title("Upload")
 
@@ -98,11 +98,23 @@ with tab_instrument:
             help="The semicolon-separated raw data file from the Prometheus Panta software.",
         )
         uploaded_meta = st.file_uploader(
-            "Data table TSV (optional — not yet processed)",
-            type=["tsv", "txt", "csv"], key="panta_meta",
+            "Data table Excel (optional)",
+            type=["xls", "xlsx"], key="panta_meta",
+            help="The data table exported from Prometheus software (.xls or .xlsx).",
         )
         if uploaded_meta is not None:
-            st.info("Data table TSV received. Metadata merge is not yet implemented.")
+            try:
+                df_meta = load_data_table(uploaded_meta)
+                st.session_state["df_panta_meta"] = df_meta
+                st.success(
+                    f"Data table loaded: **{df_meta.shape[0]}** rows x "
+                    f"**{df_meta.shape[1]}** columns."
+                )
+                st.dataframe(df_meta.head(10), use_container_width=True)
+            except ValueError as e:
+                st.error(str(e))
+            except Exception as e:
+                st.error(f"Unexpected error reading data table: {e}")
         if st.button("Parse instrument file", disabled=uploaded_scan is None):
             if uploaded_scan is None:
                 st.error("No file uploaded.")
