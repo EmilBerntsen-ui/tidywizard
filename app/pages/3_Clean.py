@@ -59,9 +59,9 @@ with st.expander("Strip whitespace"):
     strip_headers = st.checkbox("Strip column names", value=True, key="strip_headers")
     strip_cells = st.checkbox("Strip cell values", value=True, key="strip_cells")
     replace_spaces = st.checkbox(
-        "Replace spaces in values with '_'",
+        "Replace spaces with '_' (headers and values)",
         value=True, key="strip_replace_spaces",
-        help="e.g. 'Sodium acetate' → 'Sodium_acetate'",
+        help="e.g. 'initial value' → 'initial_value'",
     )
     if st.button("Add step", key="btn_strip"):
         _add_step("strip_whitespace", {
