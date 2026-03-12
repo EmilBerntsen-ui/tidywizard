@@ -223,6 +223,26 @@ def _flatten_headers(header_rows: pd.DataFrame) -> list[str]:
     return unique_cols
 
 
+def _normalise_decimal_separators(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    In string cells that look like European-format numbers (comma as decimal
+    separator, e.g. '74,29'), replace the comma with a dot so downstream
+    numeric parsing works correctly.
+
+    Only touches string cells whose entire value matches the pattern of a number
+    with a comma decimal — does not affect general text like 'Sodium acetate'.
+    """
+    _EUROPEAN_NUMBER = re.compile(r'^-?\d+,\d+$')
+
+    out = df.copy()
+    for col in out.columns:
+        if out[col].dtype == object:
+            out[col] = out[col].apply(
+                lambda v: v.replace(",", ".") if isinstance(v, str) and _EUROPEAN_NUMBER.match(v) else v
+            )
+    return out
+
+
 def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS) -> pd.DataFrame:
     """
     Load a Prometheus Panta data table Excel file into a flat DataFrame.
@@ -253,7 +273,7 @@ def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS
     if isinstance(source, io.BytesIO) and len(source.getvalue()) == 0:
         raise ValueError("Data table source is empty.")
 
-    raw = _read_excel_any_engine(source, header=None, dtype=str)
+    raw = _read_excel_any_engine(source, header=None, dtype=object)
 
     if raw.empty or len(raw.columns) == 0:
         raise ValueError("Data table parsed to an empty DataFrame.")
@@ -268,6 +288,7 @@ def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS
 
     flat_cols = _flatten_headers(header_df)
     data_df.columns = flat_cols
+    data_df = _normalise_decimal_separators(data_df)
 
     viscosity_col = next(
         (c for c in data_df.columns if c.lower() == "viscosity_components"), None
