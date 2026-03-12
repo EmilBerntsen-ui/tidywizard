@@ -155,19 +155,75 @@ def load_melting_scan(source) -> pd.DataFrame:
 _PANTA_DATA_TABLE_N_HEADER_ROWS = 3
 
 
+def _excel_format_decimals(fmt_str: str) -> Optional[int]:
+    """
+    Return the number of decimal places implied by an Excel format string.
+
+    Examples:
+        '0.00'      → 2
+        '#,##0'     → 0
+        '0.0000'    → 4
+        'General'   → None  (no rounding — let Python decide)
+
+    Returns None for General / text / unrecognised formats.
+    """
+    if not fmt_str or fmt_str.strip().upper() in ("GENERAL", "@", ""):
+        return None
+    cleaned = re.sub(r"\[.*?\]", "", fmt_str)   # strip colour/locale codes
+    section = cleaned.split(";")[0]              # first format section only
+    m = re.search(r"\.([0#?]+)", section)
+    return len(m.group(1)) if m else 0           # no dot → integer format
+
+
+def _read_xls_formatted(source) -> pd.DataFrame:
+    """
+    Read an .xls file using xlrd with formatting_info=True.
+
+    For each numeric cell, rounds the stored IEEE 754 float to the number of
+    decimal places shown in the cell's Excel number format. This ensures that
+    a cell displaying '74.29' (format '0.00', stored as 74.2916946111328)
+    comes back as 74.29, not 74.2917.
+
+    Text, empty, and boolean cells are returned as-is.
+    """
+    import xlrd
+
+    raw_bytes = source.read() if hasattr(source, "read") else open(source, "rb").read()
+    book = xlrd.open_workbook(file_contents=raw_bytes, formatting_info=True)
+    sheet = book.sheet_by_index(0)
+
+    rows = []
+    for r in range(sheet.nrows):
+        row = []
+        for c in range(sheet.ncols):
+            cell = sheet.cell(r, c)
+            if cell.ctype == xlrd.XL_CELL_NUMBER:
+                xf = book.xf_list[sheet.cell_xf_index(r, c)]
+                fmt = book.format_map.get(xf.format_key)
+                n_dec = _excel_format_decimals(fmt.format_str if fmt else "General")
+                row.append(round(cell.value, n_dec) if n_dec is not None else cell.value)
+            elif cell.ctype == xlrd.XL_CELL_EMPTY:
+                row.append(None)
+            else:
+                row.append(cell.value)
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 def _read_excel_any_engine(source, **kwargs) -> pd.DataFrame:
-    """Try xlrd (for .xls) first, fall back to openpyxl (for .xlsx)."""
+    """Try xlrd (for .xls) first with format-aware reading, fall back to openpyxl (.xlsx)."""
     pos = source.tell() if isinstance(source, io.BytesIO) else None
     try:
         import xlrd  # noqa: F401
-        return pd.read_excel(source, engine="xlrd", **kwargs)
+        return _read_xls_formatted(source)
     except ImportError:
         pass
     except Exception:
         if pos is not None:
             source.seek(pos)
     try:
-        return pd.read_excel(source, engine="openpyxl", **kwargs)
+        return pd.read_excel(source, engine="openpyxl", header=None, dtype=object)
     except Exception as e:
         raise ValueError(f"Failed to read Excel data table: {e}") from e
 
@@ -273,7 +329,7 @@ def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS
     if isinstance(source, io.BytesIO) and len(source.getvalue()) == 0:
         raise ValueError("Data table source is empty.")
 
-    raw = _read_excel_any_engine(source, header=None, dtype=object)
+    raw = _read_excel_any_engine(source)
 
     if raw.empty or len(raw.columns) == 0:
         raise ValueError("Data table parsed to an empty DataFrame.")
