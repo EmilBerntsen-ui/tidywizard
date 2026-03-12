@@ -275,6 +275,12 @@ def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS
     if viscosity_col is not None:
         data_df = _split_text_number_unit(data_df, viscosity_col)
 
+    solvent_col = next(
+        (c for c in data_df.columns if c.lower() == "viscosity_solvent"), None
+    )
+    if solvent_col is not None:
+        data_df = data_df.drop(columns=[solvent_col])
+
     return data_df.reset_index(drop=True)
 
 
@@ -304,7 +310,7 @@ def _split_text_number_unit(df: pd.DataFrame, col: str) -> pd.DataFrame:
             continue
         m = _PATTERN.match(str(raw).strip())
         if m:
-            names.append(m.group(1))
+            names.append(m.group(1).rstrip(":,; "))
             values.append(float(m.group(2)))
             units.append(m.group(3))
         else:

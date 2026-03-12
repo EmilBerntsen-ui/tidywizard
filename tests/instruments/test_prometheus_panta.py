@@ -384,6 +384,12 @@ def test_split_basic() -> None:
     assert df["Viscosity_components_value_mM"].iloc[0] == 25.0
 
 
+def test_split_trailing_colon_stripped() -> None:
+    """Trailing ':' in the name (e.g. 'Sodium acetate: 25 mM') is stripped."""
+    df = _split_text_number_unit(_make_components_df(["Sodium acetate: 25 mM"]), "Viscosity_components")
+    assert df["Viscosity_components_name"].iloc[0] == "Sodium acetate"
+
+
 def test_split_float_value() -> None:
     df = _split_text_number_unit(_make_components_df(["HEPES 7.5 mM"]), "Viscosity_components")
     assert df["Viscosity_components_value_mM"].iloc[0] == 7.5
@@ -442,3 +448,23 @@ def test_load_data_table_auto_splits_viscosity_components() -> None:
     assert "Viscosity_Components_value_mM" in df.columns
     assert df["Viscosity_Components_name"].iloc[0] == "Sodium acetate"
     assert df["Viscosity_Components_value_mM"].iloc[0] == 25.0
+
+
+def test_load_data_table_drops_viscosity_solvent() -> None:
+    """load_data_table drops Viscosity_Solvent (any casing) automatically."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Viscosity", "Viscosity"])
+    ws.append([None, None])
+    ws.append(["Solvent", "other"])
+    ws.append(["Sodium Acetate Buffer", "foo"])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    df = load_data_table(buf)
+    assert "Viscosity_Solvent" not in df.columns
+    assert "Viscosity_other" in df.columns
