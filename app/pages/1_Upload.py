@@ -106,6 +106,9 @@ with tab_instrument:
             try:
                 df_meta = load_data_table(uploaded_meta)
                 st.session_state["df_panta_meta"] = df_meta
+                st.session_state["df_raw"] = df_meta
+                st.session_state["uploaded_name"] = uploaded_meta.name or "panta_data_table.xlsx"
+                st.session_state["pipeline_spec"] = {"version": 1, "steps": []}
                 st.success(
                     f"Data table loaded: **{df_meta.shape[0]}** rows x "
                     f"**{df_meta.shape[1]}** columns."
