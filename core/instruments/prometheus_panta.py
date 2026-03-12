@@ -268,4 +268,61 @@ def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS
 
     flat_cols = _flatten_headers(header_df)
     data_df.columns = flat_cols
+
+    if "Viscosity_components" in data_df.columns:
+        data_df = _split_text_number_unit(data_df, "Viscosity_components")
+
     return data_df.reset_index(drop=True)
+
+
+def _split_text_number_unit(df: pd.DataFrame, col: str) -> pd.DataFrame:
+    """
+    Split a column whose values look like 'Sodium acetate 25 mM' into two columns:
+        {col}_name        → 'Sodium acetate'  (str)
+        {col}_value_{unit} → 25.0             (float, unit taken from the data)
+
+    The unit is read from the first matching row and must be consistent across
+    all non-null rows. Raises ValueError if units differ between rows.
+
+    Rows that don't match the expected pattern (text, number, unit) are left as
+    NaN in both output columns.
+    """
+    _PATTERN = re.compile(r'^(.+?)\s+(\d+(?:\.\d+)?)\s+(\S+)\s*$')
+
+    names: list = []
+    values: list = []
+    units: list[Optional[str]] = []
+
+    for raw in df[col]:
+        if pd.isna(raw) or str(raw).strip() == "":
+            names.append(pd.NA)
+            values.append(pd.NA)
+            units.append(None)
+            continue
+        m = _PATTERN.match(str(raw).strip())
+        if m:
+            names.append(m.group(1))
+            values.append(float(m.group(2)))
+            units.append(m.group(3))
+        else:
+            names.append(raw)
+            values.append(pd.NA)
+            units.append(None)
+
+    non_null_units = [u for u in units if u is not None]
+    if not non_null_units:
+        value_col = f"{col}_value"
+    else:
+        unique_units = set(non_null_units)
+        if len(unique_units) > 1:
+            raise ValueError(
+                f"Column {col!r} has mixed units across rows: {unique_units}. "
+                "All rows must use the same unit."
+            )
+        value_col = f"{col}_value_{non_null_units[0]}"
+
+    insert_at = df.columns.get_loc(col)
+    df = df.drop(columns=[col])
+    df.insert(insert_at, f"{col}_name", names)
+    df.insert(insert_at + 1, value_col, values)
+    return df

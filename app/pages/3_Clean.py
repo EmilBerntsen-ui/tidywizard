@@ -58,8 +58,17 @@ with st.expander("Strip whitespace"):
     st.caption("Remove extra spaces from the start and end of column names and cell values.")
     strip_headers = st.checkbox("Strip column names", value=True, key="strip_headers")
     strip_cells = st.checkbox("Strip cell values", value=True, key="strip_cells")
+    replace_spaces = st.checkbox(
+        "Replace spaces in values with '_'",
+        value=False, key="strip_replace_spaces",
+        help="e.g. 'Sodium acetate' → 'Sodium_acetate'",
+    )
     if st.button("Add step", key="btn_strip"):
-        _add_step("strip_whitespace", {"strip_headers": strip_headers, "columns": None if strip_cells else []})
+        _add_step("strip_whitespace", {
+            "strip_headers": strip_headers,
+            "columns": None if strip_cells else [],
+            "replace_spaces": replace_spaces,
+        })
 
 # ── Rename columns ──────────────────────────────────────────────────────
 

@@ -310,7 +310,10 @@ def _validate_strip_whitespace_params(params: dict[str, Any]) -> None:
 
 
 def apply_strip_whitespace(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
-    """Strip leading/trailing whitespace from column names and/or cell values."""
+    """Strip leading/trailing whitespace from column names and/or cell values.
+
+    Optionally replaces internal spaces in cell values with '_'.
+    """
     _validate_strip_whitespace_params(params)
     out = df.copy()
     if params.get("strip_headers", True):
@@ -320,6 +323,8 @@ def apply_strip_whitespace(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataF
     for col in target_cols:
         if col in out.columns and out[col].dtype == object:
             out[col] = out[col].str.strip()
+            if params.get("replace_spaces"):
+                out[col] = out[col].str.replace(" ", "_", regex=False)
     return out
 
 

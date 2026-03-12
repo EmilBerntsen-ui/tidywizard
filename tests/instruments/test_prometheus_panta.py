@@ -12,6 +12,7 @@ from core.instruments.prometheus_panta import (
     _flatten_headers,
     _parse_column,
     _pair_columns,
+    _split_text_number_unit,
     load_data_table,
     load_melting_scan,
 )
@@ -366,3 +367,78 @@ def test_load_data_table_none_raises() -> None:
 def test_load_data_table_empty_bytes_raises() -> None:
     with pytest.raises(ValueError, match="empty"):
         load_data_table(b"")
+
+
+# ── _split_text_number_unit ───────────────────────────────────────────────
+
+
+def _make_components_df(values: list) -> pd.DataFrame:
+    return pd.DataFrame({"Viscosity_components": values})
+
+
+def test_split_basic() -> None:
+    df = _split_text_number_unit(_make_components_df(["Sodium acetate 25 mM"]), "Viscosity_components")
+    assert "Viscosity_components_name" in df.columns
+    assert "Viscosity_components_value_mM" in df.columns
+    assert df["Viscosity_components_name"].iloc[0] == "Sodium acetate"
+    assert df["Viscosity_components_value_mM"].iloc[0] == 25.0
+
+
+def test_split_float_value() -> None:
+    df = _split_text_number_unit(_make_components_df(["HEPES 7.5 mM"]), "Viscosity_components")
+    assert df["Viscosity_components_value_mM"].iloc[0] == 7.5
+
+
+def test_split_original_column_removed() -> None:
+    df = _split_text_number_unit(_make_components_df(["NaCl 150 mM"]), "Viscosity_components")
+    assert "Viscosity_components" not in df.columns
+
+
+def test_split_columns_inserted_in_place() -> None:
+    """The two new columns appear where the original column was."""
+    df = pd.DataFrame({"A": [1], "Viscosity_components": ["NaCl 150 mM"], "B": [2]})
+    df = _split_text_number_unit(df, "Viscosity_components")
+    assert list(df.columns) == ["A", "Viscosity_components_name", "Viscosity_components_value_mM", "B"]
+
+
+def test_split_null_row_becomes_na() -> None:
+    # No unit can be inferred from a null row, so column is named without unit suffix
+    df = _split_text_number_unit(_make_components_df([None]), "Viscosity_components")
+    assert pd.isna(df["Viscosity_components_name"].iloc[0])
+    assert pd.isna(df["Viscosity_components_value"].iloc[0])
+
+
+def test_split_no_match_name_kept_value_na() -> None:
+    """A value that doesn't match the pattern keeps raw text in name, NA in value."""
+    df = _split_text_number_unit(_make_components_df(["PBS"]), "Viscosity_components")
+    assert df["Viscosity_components_name"].iloc[0] == "PBS"
+    assert pd.isna(df["Viscosity_components_value"].iloc[0])
+
+
+def test_split_mixed_units_raises() -> None:
+    df = _make_components_df(["NaCl 150 mM", "Tris 10 µM"])
+    with pytest.raises(ValueError, match="mixed units"):
+        _split_text_number_unit(df, "Viscosity_components")
+
+
+def test_load_data_table_auto_splits_viscosity_components() -> None:
+    """load_data_table automatically splits Viscosity_components if present."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Viscosity", "Viscosity"])
+    ws.append([None, None])
+    ws.append(["components", "other"])
+    ws.append(["Sodium acetate 25 mM", "foo"])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    df = load_data_table(buf)
+    assert "Viscosity_components" not in df.columns
+    assert "Viscosity_components_name" in df.columns
+    assert "Viscosity_components_value_mM" in df.columns
+    assert df["Viscosity_components_name"].iloc[0] == "Sodium acetate"
+    assert df["Viscosity_components_value_mM"].iloc[0] == 25.0
