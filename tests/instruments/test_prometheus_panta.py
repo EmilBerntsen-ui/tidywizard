@@ -422,14 +422,14 @@ def test_split_mixed_units_raises() -> None:
 
 
 def test_load_data_table_auto_splits_viscosity_components() -> None:
-    """load_data_table automatically splits Viscosity_components if present."""
+    """load_data_table splits Viscosity_components regardless of capitalisation."""
     import openpyxl
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["Viscosity", "Viscosity"])
     ws.append([None, None])
-    ws.append(["components", "other"])
+    ws.append(["Components", "other"])   # capital C — real Panta files use this
     ws.append(["Sodium acetate 25 mM", "foo"])
 
     buf = io.BytesIO()
@@ -437,8 +437,8 @@ def test_load_data_table_auto_splits_viscosity_components() -> None:
     buf.seek(0)
 
     df = load_data_table(buf)
-    assert "Viscosity_components" not in df.columns
-    assert "Viscosity_components_name" in df.columns
-    assert "Viscosity_components_value_mM" in df.columns
-    assert df["Viscosity_components_name"].iloc[0] == "Sodium acetate"
-    assert df["Viscosity_components_value_mM"].iloc[0] == 25.0
+    assert "Viscosity_Components" not in df.columns
+    assert "Viscosity_Components_name" in df.columns
+    assert "Viscosity_Components_value_mM" in df.columns
+    assert df["Viscosity_Components_name"].iloc[0] == "Sodium acetate"
+    assert df["Viscosity_Components_value_mM"].iloc[0] == 25.0

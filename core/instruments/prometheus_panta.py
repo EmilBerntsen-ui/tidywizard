@@ -269,8 +269,11 @@ def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS
     flat_cols = _flatten_headers(header_df)
     data_df.columns = flat_cols
 
-    if "Viscosity_components" in data_df.columns:
-        data_df = _split_text_number_unit(data_df, "Viscosity_components")
+    viscosity_col = next(
+        (c for c in data_df.columns if c.lower() == "viscosity_components"), None
+    )
+    if viscosity_col is not None:
+        data_df = _split_text_number_unit(data_df, viscosity_col)
 
     return data_df.reset_index(drop=True)
 
@@ -287,7 +290,7 @@ def _split_text_number_unit(df: pd.DataFrame, col: str) -> pd.DataFrame:
     Rows that don't match the expected pattern (text, number, unit) are left as
     NaN in both output columns.
     """
-    _PATTERN = re.compile(r'^(.+?)\s+(\d+(?:\.\d+)?)\s+(\S+)\s*$')
+    _PATTERN = re.compile(r'^(.+?)\s+(\d+(?:\.\d+)?)\s*(\S+)\s*$')
 
     names: list = []
     values: list = []
