@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 
 import pandas as pd
@@ -328,6 +329,41 @@ def apply_strip_whitespace(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataF
     return out
 
 
+# --- normalise_text ---
+
+
+def _validate_normalise_text_params(params: dict[str, Any]) -> None:
+    if not isinstance(params, dict):
+        raise ValueError("normalise_text params must be a dict.")
+
+
+def apply_normalise_text(df: pd.DataFrame, params: dict[str, Any]) -> pd.DataFrame:
+    """Lowercase and/or remove special characters from column names and/or cell values.
+
+    Special characters are anything that is not a letter, digit, space, or underscore.
+    """
+    _validate_normalise_text_params(params)
+    out = df.copy()
+
+    if params.get("lowercase_headers"):
+        out.columns = [c.lower() if isinstance(c, str) else c for c in out.columns]
+    if params.get("remove_special_headers"):
+        out.columns = [
+            re.sub(r"[^a-zA-Z0-9\s_]", "", c) if isinstance(c, str) else c
+            for c in out.columns
+        ]
+
+    str_cols = [c for c in out.columns if out[c].dtype == object]
+    if params.get("lowercase_values"):
+        for col in str_cols:
+            out[col] = out[col].str.lower()
+    if params.get("remove_special_values"):
+        for col in str_cols:
+            out[col] = out[col].str.replace(r"[^a-zA-Z0-9\s_]", "", regex=True)
+
+    return out
+
+
 # --- Registry ---
 
 
@@ -341,4 +377,5 @@ STEP_REGISTRY: dict[str, Callable[[pd.DataFrame, dict[str, Any]], pd.DataFrame]]
     "filter_rows": apply_filter_rows,
     "replace_values": apply_replace_values,
     "strip_whitespace": apply_strip_whitespace,
+    "normalise_text": apply_normalise_text,
 }

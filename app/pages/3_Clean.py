@@ -60,7 +60,7 @@ with st.expander("Strip whitespace"):
     strip_cells = st.checkbox("Strip cell values", value=True, key="strip_cells")
     replace_spaces = st.checkbox(
         "Replace spaces in values with '_'",
-        value=False, key="strip_replace_spaces",
+        value=True, key="strip_replace_spaces",
         help="e.g. 'Sodium acetate' → 'Sodium_acetate'",
     )
     if st.button("Add step", key="btn_strip"):
@@ -85,6 +85,29 @@ with st.expander("Rename columns"):
             st.warning("No columns were renamed. Change at least one name.")
         else:
             _add_step("rename_columns", {"mapping": rename_mapping})
+
+# ── Normalise text ───────────────────────────────────────────────────────
+
+with st.expander("Normalise text"):
+    st.caption("Lowercase and/or remove special characters from column names and cell values.")
+    st.markdown("**Column names**")
+    lowercase_headers = st.checkbox("Lowercase column names", key="norm_lc_headers")
+    remove_special_headers = st.checkbox("Remove special characters from column names", key="norm_rm_headers",
+        help="Keeps only letters, digits, spaces, and underscores.")
+    st.markdown("**Cell values**")
+    lowercase_values = st.checkbox("Lowercase cell values", key="norm_lc_values")
+    remove_special_values = st.checkbox("Remove special characters from cell values", key="norm_rm_values",
+        help="Keeps only letters, digits, spaces, and underscores.")
+    if st.button("Add step", key="btn_normalise"):
+        if not any([lowercase_headers, lowercase_values, remove_special_headers, remove_special_values]):
+            st.warning("Select at least one option.")
+        else:
+            _add_step("normalise_text", {
+                "lowercase_headers": lowercase_headers,
+                "lowercase_values": lowercase_values,
+                "remove_special_headers": remove_special_headers,
+                "remove_special_values": remove_special_values,
+            })
 
 # ── Replace values ──────────────────────────────────────────────────────
 
