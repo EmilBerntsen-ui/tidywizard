@@ -1,4 +1,4 @@
-"""Parse Prometheus Panta (nanoDSF) melting scan CSV into tidy long format."""
+"""Parse Prometheus Panta (nanoDSF) instrument files into tidy long format."""
 
 from __future__ import annotations
 
@@ -148,3 +148,124 @@ def load_melting_scan(source) -> pd.DataFrame:
     out = _pair_columns(df_raw)
     out["capillary"] = out["capillary"].astype(int)
     return out.reset_index(drop=True)
+
+
+# ── Data table (Excel, multi-row merged header) ───────────────────────────
+
+_PANTA_DATA_TABLE_N_HEADER_ROWS = 3
+
+
+def _read_excel_any_engine(source, **kwargs) -> pd.DataFrame:
+    """Try xlrd (for .xls) first, fall back to openpyxl (for .xlsx)."""
+    pos = source.tell() if isinstance(source, io.BytesIO) else None
+    try:
+        import xlrd  # noqa: F401
+        return pd.read_excel(source, engine="xlrd", **kwargs)
+    except ImportError:
+        pass
+    except Exception:
+        if pos is not None:
+            source.seek(pos)
+    try:
+        return pd.read_excel(source, engine="openpyxl", **kwargs)
+    except Exception as e:
+        raise ValueError(f"Failed to read Excel data table: {e}") from e
+
+
+def _flatten_headers(header_rows: pd.DataFrame) -> list[str]:
+    """
+    Flatten multi-row merged-cell headers into a single list of column names.
+
+    Excel merged cells appear as a value in the first cell and NaN in all others.
+    We forward-fill all section/group rows (every row except the last) to un-merge
+    them, then combine non-empty parts from each level with '_'.
+
+    The leaf row (last header row) is NOT forward-filled — it contains one explicit
+    name per column, and carrying it forward would corrupt unrelated adjacent columns.
+
+    Example:
+        Row 0 (ffilled): General  General  General  ...  Ratio  Ratio  Ratio
+        Row 1 (ffilled): NaN      NaN      NaN      ...  IP#1   IP#1   Slope
+        Row 2 (as-is):   Exclude  Cap      datafile ...  ø      sigma  ø
+        Result:          Exclude  General_Cap  General_datafile  ...  Ratio_IP#1_ø
+    """
+    n_rows = header_rows.shape[0]
+    filled = header_rows.copy().astype(object)
+
+    for i in range(n_rows - 1):
+        filled.iloc[i] = filled.iloc[i].ffill()
+
+    flat_cols = []
+    for col_idx in range(filled.shape[1]):
+        parts = []
+        for row_idx in range(n_rows):
+            val = filled.iloc[row_idx, col_idx]
+            if pd.notna(val) and str(val).strip():
+                parts.append(str(val).strip())
+        # Remove consecutive duplicates (edge case: same word in group + leaf)
+        deduped: list[str] = []
+        for p in parts:
+            if not deduped or p != deduped[-1]:
+                deduped.append(p)
+        flat_cols.append("_".join(deduped) if deduped else f"col_{col_idx}")
+
+    # Ensure uniqueness: append .1, .2, … for duplicate names
+    seen: dict[str, int] = {}
+    unique_cols: list[str] = []
+    for name in flat_cols:
+        if name in seen:
+            seen[name] += 1
+            unique_cols.append(f"{name}.{seen[name]}")
+        else:
+            seen[name] = 0
+            unique_cols.append(name)
+
+    return unique_cols
+
+
+def load_data_table(source, n_header_rows: int = _PANTA_DATA_TABLE_N_HEADER_ROWS) -> pd.DataFrame:
+    """
+    Load a Prometheus Panta data table Excel file into a flat DataFrame.
+
+    The data table uses a multi-row merged-cell header (section > subsection > column).
+    This function flattens the header into single-level column names and returns
+    all data rows below the header.
+
+    Supports both .xls (legacy binary) and .xlsx (Open XML) formats.
+
+    Args:
+        source: file path string, bytes, or BytesIO object.
+        n_header_rows: number of header rows to collapse (default: 3).
+
+    Returns:
+        DataFrame with flat column names derived from the merged header hierarchy.
+
+    Raises:
+        ValueError: if source is empty, unreadable, or has fewer rows than
+                    n_header_rows.
+    """
+    if source is None:
+        raise ValueError("Data table source is empty.")
+    if isinstance(source, bytes):
+        if len(source) == 0:
+            raise ValueError("Data table source is empty.")
+        source = io.BytesIO(source)
+    if isinstance(source, io.BytesIO) and len(source.getvalue()) == 0:
+        raise ValueError("Data table source is empty.")
+
+    raw = _read_excel_any_engine(source, header=None, dtype=str)
+
+    if raw.empty or len(raw.columns) == 0:
+        raise ValueError("Data table parsed to an empty DataFrame.")
+    if raw.shape[0] < n_header_rows:
+        raise ValueError(
+            f"Data table has only {raw.shape[0]} row(s); "
+            f"expected at least {n_header_rows} header rows."
+        )
+
+    header_df = raw.iloc[:n_header_rows].reset_index(drop=True)
+    data_df = raw.iloc[n_header_rows:].copy()
+
+    flat_cols = _flatten_headers(header_df)
+    data_df.columns = flat_cols
+    return data_df.reset_index(drop=True)

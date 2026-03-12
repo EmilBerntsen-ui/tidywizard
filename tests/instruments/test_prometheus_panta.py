@@ -1,4 +1,4 @@
-"""Tests for the Prometheus Panta melting scan parser."""
+"""Tests for the Prometheus Panta melting scan and data table parsers."""
 
 from __future__ import annotations
 
@@ -9,8 +9,10 @@ import pytest
 
 from core.instruments.prometheus_panta import (
     _classify_measurement_type,
+    _flatten_headers,
     _parse_column,
     _pair_columns,
+    load_data_table,
     load_melting_scan,
 )
 
@@ -226,3 +228,141 @@ def test_load_empty_bytes_raises() -> None:
 def test_load_none_raises() -> None:
     with pytest.raises(ValueError, match="empty"):
         load_melting_scan(None)
+
+
+# ── _flatten_headers ──────────────────────────────────────────────────────
+
+
+def _make_header_df() -> pd.DataFrame:
+    """
+    Build a 3-row header DataFrame mimicking a Panta data table export.
+
+    Row 0: section groups (merged cells appear as NaN after the first cell)
+    Row 1: sub-headers (only under "Ratio")
+    Row 2: leaf column names
+    """
+    return pd.DataFrame([
+        # Row 0: section groups
+        [None,      None,     "General",     None,         "Ratio",        None],
+        # Row 1: sub-headers
+        [None,      None,     None,          None,         "IP # 1 (C)",   None],
+        # Row 2: leaf column names
+        ["Exclude", "symbol", "Capillaries", "data file",  "ø",            "sigma"],
+    ])
+
+
+def test_flatten_headers_standalone_columns() -> None:
+    """Columns with no section header use only the leaf name."""
+    cols = _flatten_headers(_make_header_df())
+    assert cols[0] == "Exclude"
+    assert cols[1] == "symbol"
+
+
+def test_flatten_headers_two_level() -> None:
+    """Section + leaf name are joined with '_'."""
+    cols = _flatten_headers(_make_header_df())
+    assert cols[2] == "General_Capillaries"
+    assert cols[3] == "General_data file"
+
+
+def test_flatten_headers_three_level() -> None:
+    """Section + subsection + leaf name are joined with '_'."""
+    cols = _flatten_headers(_make_header_df())
+    assert cols[4] == "Ratio_IP # 1 (C)_ø"
+    assert cols[5] == "Ratio_IP # 1 (C)_sigma"
+
+
+def test_flatten_headers_no_leaf_name() -> None:
+    """A column with only a section group (no leaf) uses just the section name."""
+    header = pd.DataFrame([
+        ["General", None],
+        [None,      None],
+        [None,      None],   # leaf row intentionally empty
+    ])
+    cols = _flatten_headers(header)
+    assert cols[0] == "General"
+
+
+def test_flatten_headers_duplicate_names_get_suffix() -> None:
+    """Duplicate column names get .1, .2, … suffixes to stay unique."""
+    header = pd.DataFrame([
+        ["General", "General"],
+        [None,      None],
+        [None,      None],
+    ])
+    cols = _flatten_headers(header)
+    assert cols[0] == "General"
+    assert cols[1] == "General.1"
+
+
+def test_flatten_headers_leaf_row_not_forward_filled() -> None:
+    """Values in the leaf row must NOT bleed into adjacent empty leaf cells."""
+    header = pd.DataFrame([
+        ["General", "General", "General"],
+        [None,      None,      None],
+        ["Cap",     None,      None],   # only first leaf cell is named
+    ])
+    cols = _flatten_headers(header)
+    # The second and third columns should NOT inherit "Cap" from the first
+    assert cols[1] == "General"
+    assert cols[2] == "General.1"
+
+
+# ── load_data_table ───────────────────────────────────────────────────────
+
+
+def _make_data_table_xlsx(n_data_rows: int = 2) -> bytes:
+    """
+    Build a minimal synthetic Panta data table as an in-memory .xlsx file.
+
+    Header structure (3 rows):
+        Row 0:  [NaN,     NaN,      General,      General,    Ratio,    Ratio ]
+        Row 1:  [NaN,     NaN,      NaN,          NaN,        IP#1,     IP#1  ]
+        Row 2:  [Exclude, symbol,   Capillaries,  data file,  ø,        sigma ]
+    Data rows: Exclude=False, symbol=X, Capillaries=1..N, etc.
+    """
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    # Header rows (merged cells represented by only setting the first cell)
+    ws.append([None,      None,     "General",    "General",  "Ratio",  "Ratio"])
+    ws.append([None,      None,     None,         None,       "IP#1",   "IP#1"])
+    ws.append(["Exclude", "symbol", "Capillaries","data file","ø",      "sigma"])
+
+    for i in range(1, n_data_rows + 1):
+        ws.append([False, "X", i, f"scan_{i}.csv", 65.0 + i, 0.1])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_load_data_table_schema() -> None:
+    df = load_data_table(io.BytesIO(_make_data_table_xlsx()))
+    assert "Exclude" in df.columns
+    assert "General_Capillaries" in df.columns
+    assert "Ratio_IP#1_ø" in df.columns
+
+
+def test_load_data_table_row_count() -> None:
+    df = load_data_table(io.BytesIO(_make_data_table_xlsx(n_data_rows=5)))
+    assert len(df) == 5
+
+
+def test_load_data_table_no_data_rows_returns_empty() -> None:
+    """A file with only header rows returns an empty DataFrame (not an error)."""
+    df = load_data_table(io.BytesIO(_make_data_table_xlsx(n_data_rows=0)))
+    assert len(df) == 0
+    assert "Exclude" in df.columns
+
+
+def test_load_data_table_none_raises() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        load_data_table(None)
+
+
+def test_load_data_table_empty_bytes_raises() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        load_data_table(b"")
